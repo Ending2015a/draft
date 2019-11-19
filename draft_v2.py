@@ -14,32 +14,28 @@ from collections import OrderedDict
 Some attributes:
 
     __draftclass__: The draft class wrapping the original class. Attached on the original 
-        class inherited from BaseDraft by DraftMeta in DraftMeta.__new__.
+        class inherited from Draftable by DraftMeta in DraftMeta.__new__.
     __draftwrappedclass__: The original class which is wrapped by draft class. Attached on 
         the draft class. 
     __draftwrappedparam__: The parameters to instantiate an instance of the original class.
         Attached on the draft class.
     __instantiate__: The constructor to instantiate a new object from draft classes. 
-        Attached by inheriting from BaseDraft.
+        Attached by inheriting from Draftable.
     __instancename__: The name (key) of the instance.
+    __instancedict__: A key/instance mapping to store generated instances.
 
 '''
 
 
 __all__ = [
     'Draft',
-    'BaseDraft',
+    'Draftable',
     'Instantiate',
 ]
 
 DEBUG = True
 
 
-def Instantiate(draft, key='d', ignore=True):
-    if isinstance(draft, Draft):
-        return draft.instantiate(key, ignore)
-        
-    elif isinstance(draft, _Draft):
 
 
 def _draft_factory(cls):
@@ -60,31 +56,47 @@ def _draft_factory(cls):
         class_name = 'Draft_'
         
     class_name = class_name + cls.__name__
-    base_class = (_Draft, )
+    base_class = (Draft, )
     
     # Custom function for custom Draft
     def __init__(self, *args, **kwargs):
         
         # call super
         _Draft.__init__(self)
+
         # save params
         self.__draftwrappedparam__ = (args, kwargs)
         
-    def __repr__(self):
+    # def __repr__(self):
     
-        draft_repr = '<Draft: '
-        class_repr = repr(self.__class__.__draftwrappedclass__)
+    #     draft_repr = '<Draft: '
+    #     class_repr = repr(self.__class__.__draftwrappedclass__)
         
-        if class_repr.startswith('<'):
-            return class_repr.replace('<', draft_repr, 1)
-        else:
-            return draft_repr + class_repr + '>'
+    #     if class_repr.startswith('<'):
+    #         return class_repr.replace('<', draft_repr, 1)
+    #     else:
+    #         return draft_repr + class_repr + '>'
+
+    def __instantiate__(self, *args, **kwargs):
+        '''
+        Override instantiate interface
+        
+        Call class.__instantiate__
+        '''
+
+        inst = self.__draftwrappedclass__.__instantiate__(*args, **kwargs)
+
+        setattr(inst, '__instancename__', None)
+
+        return inst
+
     
     # build attributes dictionary
     attributes = {'__init__': __init__,
-                  '__repr__': __repr__,
-                  '__draftwrappedclass__', cls,
-                  '__draftwrappedparam__', ([], {})}
+                #   '__repr__': __repr__,
+                  '__instantiate__': __instantiate__,
+                  '__draftwrappedclass__': cls,
+                  '__draftwrappedparam__': ([], {})}
                   
                   
     # instantiate custom draft class              
@@ -110,42 +122,61 @@ class _DraftMeta(abc.ABCMeta):
     The metaclass for _Draft
     '''
     
-    def __repr__(cls):
+    # def __repr__(cls):
     
-        draft_repr = '<Draft: '
-        class_repr = repr(cls.__draftwrappedclass__)
+    #     draft_repr = '<Draft: '
+    #     class_repr = repr(cls.__draftwrappedclass__)
         
-        if class_repr.startswith('<'):
-            return class_repr.replace('<', draft_repr, 1)
-        else:
-            return draft_repr + class_repr + '>'
+    #     if class_repr.startswith('<'):
+    #         return class_repr.replace('<', draft_repr, 1)
+    #     else:
+    #         return draft_repr + class_repr + '>'
 
 
 class _Draft(metaclass=_DraftMeta):
     '''
     _Draft
     
-    The base class of _Draft
+    The raw class of Draft
     
     Used by Draft and _draft_factory
     '''
 
     __draftwrappedclass__ = None
     __draftwrappedparam__ = ([], {})
+
+    def __new__(cls, *args, **kwargs):
+        inst = super(_Draft, cls).__new__(cls)
+
+        # create instance attributes
+        setattr(inst, '__draftwrappedclass__', cls.__draftwrappedclass__)
+        setattr(inst, '__draftwrappedparam__', cls.__draftwrappedparam__)
+
+        return inst
     
-    def __init__(self):
-        # create attributes
+    def __init__(self, *args, **kwargs):
+        # initialize instance attributes
         self.__draftwrappedclass__ = self.__class__.__draftwrappedclass__
         self.__draftwrappedparam__ = self.__class__.__draftwrappedparam__
         
-        self._instance_dict = OrderedDict()
-    
-    @abc.abstractmethod
+        
     def __instantiate__(self, *args, **kwargs):
         '''
-        Interface for instantiating new objects
+        Interface to instantiate an anonymous object
+
+        Call class.__new__
         '''
-        pass
+
+        inst = self.__draftwrappedclass__(*args, **kwargs)
+
+        return isnt
+
+
+
+class _default:
+    '''Default instance'''
+    def __str__(self):
+        return 'default'
 
     
 class Draft(_Draft):
@@ -179,13 +210,21 @@ class Draft(_Draft):
     
     #_Draft.__draftwrappedclass__
     #_Draft.__draftwrappedparam__
-    
+
+    default = _default
+
+    def __new__(cls, *args, **kwargs):
+        inst = super(Draft, cls).__new__(cls, *args, **kwargs)
+
+        # create attribute
+        setattr(inst, '__instancedict__', OrderedDict())
+
+        return inst
+
+
     def __init__(self, cls):
-        super(Draft, self).__init__()
-        
-        # create attributes
+        # initialize class attributes
         self.__draftwrappedclass__ = cls
-        self.__draftwrappedparam__ = self.__class__.__draftwrappedparam__
         
         
     def __call__(self, *args, **kwargs):
@@ -194,17 +233,48 @@ class Draft(_Draft):
 
         return self
         
-    def __repr__(self):
-        # make repr
-        draft_repr = '<{}( '.format(self.__class__.__name__)
-        class_repr = repr(self.__draftwrappedclass__)
+    def __len__(self):
+        return len(self.__instancedict__)
+
+    def __getitem__(self, key=_default):
+        return self.instance(key)
+
+
+    # def __repr__(self):
+    #     # make repr
+    #     draft_repr = '<{}( '.format(self.__class__.__name__)
+    #     class_repr = repr(self.__draftwrappedclass__)
         
-        if class_repr.startswith('<'):
-            return class_repr.replace('<', draft_repr, 1)
-        else:
-            return draft_repr + class_repr + ' )>'
+    #     if class_repr.startswith('<'):
+    #         return class_repr.replace('<', draft_repr, 1)
+    #     else:
+    #         return draft_repr + class_repr + ' )>'
     
-    def instantiate(self, key='d', ignore=True):
+    def __instantiate__(self, *args, **kwargs):
+        '''
+        Interface to instantiate an anonymous object
+
+        Call class.__new__
+        '''
+
+        inst = self.__draftwrappedclass__(*args, **kwargs)
+
+        setattr(inst, '__instancename__', None)
+
+        return inst
+
+        # if isinstance(self.__draftwrappedclass__, Draftable):
+        #     #if hasattr(self.__draftwrappedclass__, '__instantiate__'):
+        #     inst = self.__draftwrappedclass__.__instantiate__(*args, **kwargs)
+        # else:
+        #     inst = self.__draftwrappedclass__(*args, **kwargs)
+
+        # setattr(inst, '__instancename__', None)
+
+        # return inst
+        
+
+    def instantiate(self, key=_default, ignore=True):
         '''
         instantiate an object from predefined parameters
         
@@ -214,38 +284,40 @@ class Draft(_Draft):
         '''
         
         # make new instance
-        if key not in self._instance_dict:
+        if key not in self.__instancedict__:
             # get params
             args, kwargs = self.__draftwrappedparam__
             
             # make instance 
-            self._instance_dict[key] = self.__draftwrappedclass__(*args, **kwargs)
+            inst = self.__instantiate__(*args, **kwargs)
             
             # set instance name
-            setattr(self._instance_dict[key], '__instancename__', key)
+            setattr(inst, '__instancename__', key)
+
+            self.__instancedict__[key] = inst
             
         else:
             if not ignore:
                 raise RuntimeError('Key condlict! The instance of {} for key {} '\
-                            'already exists'.format(self.__draftwrappedclas__, key))
+                            'already exists'.format(self.__draftwrappedclass__, key))
                 
-        return self._instance_dict[key]
+        return self.__instancedict__[key]
         
-    def instance(self, key='d'):
+    def instance(self, key=_default):
         '''
         Get instance by key
         '''
         
-        if key not in self._instance_dict:
+        if key not in self.__instancedict__:
             raise RuntimeError('The instance of {} for key {} does not exist'.format(
-                                self._inner_class, key))
+                                self.__draftwrappedclass__, key))
                                 
-        return self._instance_dict[key]
+        return self.__instancedict__[key]
         
         
 '''
         
-# only those classes inherited from BaseDraft have __instantiate__ function.
+# only those classes inherited from Draftable have __instantiate__ function.
             #      self.__draftwrappedclass__.__instantiate__(*args, **kwargs)
             if hasattr(self.__draftwrappedclass__, '__instantiate__'):
                 self._instance_dict[key] = self.__draftwrappedclass__.__instantiate__(*args, **kwargs)
@@ -258,7 +330,7 @@ class DraftMeta(abc.ABCMeta):
     '''
     DraftMeta
 
-    A meta class for BaseDraft class. The custom Draft class (a subclass of Draft) for 
+    A meta class for Draftable class. The custom Draft class (a subclass of Draft) for 
     those subclasses inherited from this meta class is created and assigned to the 
     subclass.__draftclass__.
 
@@ -268,9 +340,9 @@ class DraftMeta(abc.ABCMeta):
 
     Example usage:
 
-        DO NOT USE THIS CLASS DIRECTLY. Please inherit from BaseDraft.
+        DO NOT USE THIS CLASS DIRECTLY. Please inherit from Draftable.
 
-    >>> class MyModule(BaseDraft):
+    >>> class MyModule(Draftable):
     ...     def __init__(self, inputs):
     ...         pass
 
@@ -278,28 +350,28 @@ class DraftMeta(abc.ABCMeta):
 
     def __new__(_cls, name, bases, namespace, **kwargs):
     
-        cls = super(DraftMeta, _cls).__new__(_cls, name, bases, namespace, **kwargs)
+        cls = super().__new__(_cls, name, bases, namespace, **kwargs)
         setattr(cls, '__draftclass__', _draft_factory(cls))
         
         return cls
         
-    def __instancecheck__(cls, instance):
+    # def __instancecheck__(cls, instance):
     
-        if isinstance(instance, _Draft):
-            inner_class_check = super(abc.ABCMeta, cls).__subclasscheck__(instance.__draftwrappedclass__)
-        else:
-            inner_class_check = False
+    #     if isinstance(instance, _Draft):
+    #         inner_class_check = super().__subclasscheck__(instance.__draftwrappedclass__)
+    #     else:
+    #         inner_class_check = False
             
-        return inner_class_check or super(abc.ABCMeta, cls).__instancecheck__(instance)
+    #     return inner_class_check or super().__instancecheck__(instance)
 
     def __subclasscheck__(cls, subclass):
     
         if issubclass(subclass, _Draft):
-            inner_class_check = super(abc.ABCMeta, cls).__subclasscheck__(subclass.__draftwrappedclass__)
+            inner_class_check = super().__subclasscheck__(subclass.__draftwrappedclass__)
         else:
             inner_class_check = False
             
-        return inner_class_check or super(abc.ABCMeta, cls).__subclasscheck__(subclass)
+        return inner_class_check or super().__subclasscheck__(subclass)
 
 
 
@@ -324,7 +396,7 @@ class Draftable(metaclass=DraftMeta):
     def __new__(cls, *args, **kwargs):
     
         if not hasattr(cls, '__draftclass__'):
-            raise RuntimeError(('The class inherited from BaseDraft does not contain __draftclass__ attribute.'
+            raise RuntimeError(('The class inherited from Draftable does not contain __draftclass__ attribute.'
                                 ' Please do not overwrite __metaclass__ attribute of the class.'))
         
         # create draft using __draftclass__
@@ -338,35 +410,121 @@ class Draftable(metaclass=DraftMeta):
         '''
         pass
         
-    def __repr__(self):
-        draft_repr = '{}[{!r}]'.format(self.__class__.__draftclass__.__name__, self.__instancename__)
-        module = self.__class__.__module__
-        qualname = self.__class__.__qualname__
+    # def __repr__(self):
+    #     #TODO: check repr results
+    #     draft_repr = 'Draft[{!r}]'.format(#self.__class__.__draftclass__.__name__, 
+    #                                    self.__instancename__)
+    #     module = self.__class__.__module__
+    #     qualname = self.__class__.__qualname__
 
-        return "<{}: {}.{} object at {}>".format(draft_repr, module, qualname, hex(id(self)))
+    #     return "<{}: {}.{} object at {}>".format(draft_repr, module, qualname, hex(id(self)))
 
 
     @classmethod
     def __instantiate__(cls, *args, **kwargs):
-        ins = super(Draftable, cls).__new__(cls)
-        ins.__init__(*args, **kwargs)
+        '''
+        Instantiate a new instance, same as the original __new__ function
+        '''
+        inst = super(Draftable, cls).__new__(cls)
+
+        # create instance attributes
+        setattr(inst, '__instancename__', cls.__instancename__)
         
-        self.__instancename__ = self.__class__.__instancename__
-        
-        return ins
+        inst.__init__(*args, **kwargs)
+
+        return inst
 
 
 
-#Draft/_Draft
-draft_a = A() #Draftable
-#Draftable
-a = draft_a.instantiate()
-isinstance(draft_a, A) #True
-isinstance(draft_a, Draft) #True
-isinstance(a, A) #True
-isinstance(a, Draft) #False
+def Instantiate(draft, key=Draft.default, ignore=True):
+    if isinstance(draft, Draft):
+        inst = draft.instantiate(key, ignore)
+    else:
+        inst = draft
+    
+    return inst
 
-issubclass(type(draft_a), A) #True
-issubclass(type(draft_a), Draft) #True
-issubclass(type(a), A)  #True
-issubclass(type(a), Draft) #False
+
+
+
+if __name__ == '__main__':
+    
+    class A(Draftable):
+        def __init__(self, name):
+            super(Draftable, self).__init__()
+            self.name = name
+
+        def introduce(self):
+            return 'My name is {}.'.format(self.name)
+
+    class B(A):
+        def __init__(self, gender, name):
+            super(B, self).__init__(name)
+            self.gender = gender
+
+        def introduce(self):
+            return super(B, self).introduce() + ' I\'m a {}.'.format(self.gender)
+
+    
+    print('Print A:', A)
+    print('Print B:', B)
+
+    assert issubclass(A, Draftable), 'A is not a subclass of Draftable'
+    assert issubclass(B, Draftable), 'B is not a subclass of Draftable'
+
+    print('Stage 1: clear')
+
+    draft_a = A(name='Ending2015a')
+    draft_b = B(gender='boy', name='Ending2015a')
+    
+    print('type(draft_a):', type(draft_a))
+    print('type(draft_b):', type(draft_b))
+    print('draft_a:', draft_a)
+    print('draft_b:', draft_b)
+
+    assert not isinstance(draft_a, Draftable), 'draft_a is an instance of Draftable'
+    assert not isinstance(draft_b, Draftable), 'draft_b is an instance of Draftable'
+    assert not isinstance(draft_a, A), 'draft_a is an instance of A'
+    assert not isinstance(draft_b, B), 'draft_b is an instance of B'
+    assert not isinstance(draft_a, B), 'draft_a is an instance of B'
+    assert not isinstance(draft_b, A), 'draft_b is an instance of A'
+    assert isinstance(draft_a, Draft), 'draft_a is not an instance of Draft'
+    assert isinstance(draft_b, Draft), 'draft_b is not an instance of Draft'
+
+    assert issubclass(type(draft_a), Draftable), 'type(draft_a) is not a subclass of Draftable'
+    assert issubclass(type(draft_b), Draftable), 'type(draft_b) is not a subclass of Draftable'
+    assert issubclass(type(draft_a), A), 'type(draft_a) is not a subclass of A'
+    assert issubclass(type(draft_b), B), 'type(draft_b) is not a subclass of B'
+    assert issubclass(type(draft_b), A), 'type(draft_b) is not a subclass of A'
+    assert issubclass(type(draft_a), Draft), 'type(draft_a) is not a subclass of Draft'
+    assert issubclass(type(draft_b), Draft), 'type(draft_b) is not a subclass of Draft'
+
+    print('Stage 2: Clear')
+
+    a = Instantiate(draft_a)
+    b = Instantiate(draft_b)
+
+    print('type(a):', type(a))
+    print('type(b):', type(b))
+    print('a:', a)
+    print('b:', b)
+
+    assert isinstance(a, Draftable), 'a is not an instance of Draftable'
+    assert isinstance(b, Draftable), 'b is not an instance of Draftable'
+    assert isinstance(a, A), 'a is not an instance of A'
+    assert isinstance(b, B), 'b is not an instance of B'
+    assert not isinstance(a, B), 'a is an instance of B'
+    assert isinstance(b, A), 'b is not an instance of A'
+    assert not isinstance(a, Draft), 'a is an instance of Draft'
+    assert not isinstance(b, Draft), 'b is an instance of Draft'
+
+    assert issubclass(type(a), Draftable), 'type(a) is not a subclass of Draftable'
+    assert issubclass(type(b), Draftable), 'type(b) is not a subclass of Draftable'
+    assert issubclass(type(a), A), 'type(a) is not a subclass of A'
+    assert issubclass(type(b), B), 'type(b) is not a subclass of B'
+    assert not issubclass(type(a), B), 'type(a) is a subclass of B'
+    assert issubclass(type(b), A), 'type(b) is not a subclass of A'
+    assert not issubclass(type(a), Draft), 'type(a) is a subclass of Draft'
+    assert not issubclass(type(b), Draft), 'type(b) is a subclass of Draft'
+
+    print('Stage 3: Clear')
