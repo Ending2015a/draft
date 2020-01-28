@@ -339,6 +339,7 @@ def get_baseclass():
     return _BASEDRAFT
 
 def set_baseclass(draft):
+    global _BASEDRAFT
     assert issubclass(draft, Draft), 'draft must inherit from Draft'
     _BASEDRAFT = draft
         
