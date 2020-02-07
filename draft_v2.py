@@ -171,10 +171,12 @@ class _Draft(metaclass=_DraftMeta):
     '''
 
     __draftwrappedclass__ = None     # class attribute
-    __draftwrappedparam__ = ([], {}) # instance attribute
+    __draftwrappedparam__ = None     # instance attribute
 
     def __new__(cls, *args, **kwargs):
         inst = super(_Draft, cls).__new__(cls)
+
+        self.__draftwrappedparam__ = ([], {})
 
         return inst
     
@@ -262,10 +264,10 @@ class Draft(_Draft):
         
     def __call__(self, *args, **kwargs):
         '''
-        Update parameters
+        Initialize parameters
         '''
         # set params
-        self.__draftwrappedparam__ = (args, kwargs)
+        super(Draft, self).__init__(*args, **kwargs)
 
         return self
 
