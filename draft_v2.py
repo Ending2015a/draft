@@ -11,19 +11,43 @@ from collections import OrderedDict
 # --- my module ---
 
 '''
-Some attributes:
 
-    __draftclass__: The draft class wrapping the original class. Attached on the original 
-        class inherited from Draftable by DraftMeta in DraftMeta.__new__.
-    __draftwrappedclass__: The original class which is wrapped by draft class. Attached on 
-        the draft class. 
-    __draftwrappedparam__: The parameters to instantiate an instance of the original class.
-        Attached on the draft class.
-    __instantiate__: The constructor to instantiate a new object from draft classes. 
-        Attached by inheriting from Draftable.
-    __instancename__: The name (key) of the instance.
-    __instancedict__: A key/instance mapping to store generated instances.
+Attributes:
+    Original class:
+        __draftclass__: The draft class wrapping the original non-draft class. This attribute is attached on
+            the original class by DraftMeta in DraftMeta.__new__, if it inherits from Draftable.
 
+    Draft class:
+        __draftwrappedclass__: (None) The original class whcih is wrapped by the draft class. This attribute is 
+            attached on the draft class.
+        __draftwrappedparam__: (list, dict) The parameters used to instantiate an instance of the original class.
+        __instancedict__: (dict) A <key, instance> mapping to store generated instances.
+
+    Original class instance:
+        __draft__: The draft object that the class instance instantiated from. This attribute is attached on
+            the original class instances in Draft.instantiate.
+        __instancename__: The name (key) of the instance. This attribute is attached on the original class
+            instances in Draft.instantiate.
+
+    Draft class instance:
+        __draftwrappedclass__: The original class whcih is wrapped by the draft class. This attribute is 
+            attached on the draft class.
+        __draftwrappedparam__: The parameters used to instantiate an instance of the original class.
+        __instancedict__: A (key, instance) mapping to store generated instances.
+
+Main instances:
+
+    Original class:
+        __instantiate__: The constructor to instantiate a new object from the draft class. This attribute is
+            attached by inheriting from Draftable.
+    Draft class:    
+        __instantiate__: The constructor to instantiate a new object from the draft class. This attribute is
+            attached by inheriting from Draftable.
+    
+    Original class instance:
+
+    Draft class instance:
+    
 '''
 
 
@@ -31,6 +55,8 @@ __all__ = [
     'Draft',
     'Draftable',
     'Instantiate',
+    'is_draft',
+    'is_subdraft'
 ]
 
 DEBUG = False
@@ -192,6 +218,12 @@ class Draft(_Draft):
     Notice that isinstance/issubclass can check inside the Draft, which means
     the wrapped class will also be checked.
 
+    Attributes:
+        __draftwrappedclass__:
+        __draftwrappedparam__:
+        default:
+    
+
     Example usage:
 
     >>> @Draft
@@ -209,11 +241,10 @@ class Draft(_Draft):
     >>> isinstance(a, Draft)       # False
     >>> isinstance(a, A)           # True
     '''
-    
-    #_Draft.__draftwrappedclass__
-    #_Draft.__draftwrappedparam__
 
     default = _default
+
+    __instancedict__ = None
 
     def __new__(cls, *args, **kwargs):
         inst = super(Draft, cls).__new__(cls, *args, **kwargs)
@@ -273,6 +304,8 @@ class Draft(_Draft):
         Interface to instantiate an anonymous object
 
         Call class.__new__
+
+        This function is overwritten by the _draft_factory
         '''
 
         inst = self.__draftwrappedclass__(*args, **kwargs)
@@ -280,16 +313,6 @@ class Draft(_Draft):
         setattr(inst, '__instancename__', None)
 
         return inst
-
-        # if isinstance(self.__draftwrappedclass__, Draftable):
-        #     #if hasattr(self.__draftwrappedclass__, '__instantiate__'):
-        #     inst = self.__draftwrappedclass__.__instantiate__(*args, **kwargs)
-        # else:
-        #     inst = self.__draftwrappedclass__(*args, **kwargs)
-
-        # setattr(inst, '__instancename__', None)
-
-        # return inst
     
 
     def instantiate(self, key=_default, ignore=True):
@@ -311,6 +334,8 @@ class Draft(_Draft):
             
             # set instance name
             setattr(inst, '__instancename__', key)
+            # set original draft
+            setattr(inst, '__draft__', self)
 
             self.__instancedict__[key] = inst
             
@@ -408,12 +433,17 @@ class Draftable(metaclass=DraftMeta):
     class in the instance creation time. The params are passed when calling 
     __draftclass__.__instantiate__, and an instance of the original class will be created.
 
-    Functions:
+    Attributes:
+        __draft__: The original draft that instantiate the instance
+        __instancename__: The instance name (key) to instantiate
+
+    Main interfaces:
         __new__: Create new draft instance using __draftclass__ attached on the original class.
         __init__: Do nothing
         __instantiate__: Instantiate a new instance of the original class.
     '''
-    
+
+    __draft__ = None
     __instancename__ = None
     
     def __new__(cls, *args, **kwargs):
@@ -442,6 +472,7 @@ class Draftable(metaclass=DraftMeta):
 
         # create instance attributes
         setattr(inst, '__instancename__', cls.__instancename__)
+        setattr(inst, '__draft__', cls.__draft__)
         
         inst.__init__(*args, **kwargs)
 
@@ -458,6 +489,32 @@ def Instantiate(draft, key=Draft.default, ignore=True):
     return inst
 
 
+def is_draft(obj, _class=None):
+    '''
+    If _class is None, check if the given object is an instance of BaseDraft.
+    Else, check if the given object is a draft of the given class.
+    '''
+
+    if _class is None:
+        # check if the object is an instance of base draft class
+        return isinstance(obj, get_baseclass())
+    else:
+        # check if the object is an draft of the main class
+        return (hasattr(obj, '__draftwrappedclass__') and obj.__draftwrappedclass__ is _class)
+
+def is_subdraft(obj, subclass=None):
+    '''
+    If subclass is None, check if the given object is an instance of BaseDraft.
+    (This feature is exactly the same as is_draft)
+    Else, check if the given object is a draft or sub-draft of the given class.
+    '''
+
+    if subclass is None:
+        # check if the object is an instance of base draft class
+        return isinstance(obj, get_baseclass())
+    else:
+        # check if the object is an draft of the main class
+        return (hasattr(obj, '__draftwrappedclass__') and issubclass(obj.__draftwrappedclass__, subclass))
 
 
 if __name__ == '__main__':
@@ -541,3 +598,32 @@ if __name__ == '__main__':
     assert not issubclass(type(b), Draft), 'type(b) is a subclass of Draft'
 
     print('Stage 3: Clear')
+
+    assert not is_draft(A), 'A is a draft'
+    assert not is_draft(B), 'B is a draft'
+    assert is_draft(draft_a), 'draft_a is not a draft'
+    assert is_draft(draft_b), 'draft_b is not a draft'
+    assert not is_draft(a), 'a is a draft'
+    assert not is_draft(b), 'b is a draft'
+
+    assert is_draft(draft_a, A), 'draft_a is not a draft of A'
+    assert is_draft(draft_b, B), 'draft_b is not a draft of B'
+    assert not is_draft(draft_a, B), 'draft_a is a draft of B'
+    assert not is_draft(draft_b, A), 'draft_b is a draft of A'
+
+    assert is_subdraft(draft_a, A), 'draft_a is not a sub-draft of A'
+    assert is_subdraft(draft_b, B), 'draft_b is not a sub-draft of B'
+    assert not is_subdraft(draft_a, B), 'draft_a is a sub-draft of B'
+    assert is_subdraft(draft_b, A), 'draft_b is a sub-draft of A'
+
+    assert not is_draft(a, A), 'a is a draft of A'
+    assert not is_draft(b, B), 'b is a draft of B'
+    assert not is_draft(a, B), 'a is a draft of B'
+    assert not is_draft(b, A), 'b is a draft of A'
+
+    assert not is_draft(a, draft_a), 'a is a draft of draft_a'
+    assert not is_draft(b, draft_b),'b is a draft of draft_b'
+    assert not is_draft(a, draft_b), 'a is a draft of draft_b'
+    assert not is_draft(b, draft_a),'b is a draft of draft_a'
+
+    print('Stage 4: Clear')
