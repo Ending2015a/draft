@@ -176,7 +176,7 @@ class _Draft(metaclass=_DraftMeta):
     def __new__(cls, *args, **kwargs):
         inst = super(_Draft, cls).__new__(cls)
 
-        self.__draftwrappedparam__ = ([], {})
+        inst.__draftwrappedparam__ = ([], {})
 
         return inst
     
