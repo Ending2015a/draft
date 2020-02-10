@@ -72,15 +72,16 @@ def _draft_factory(cls):
     '''
     
     # make class name
-    if (cls.__name__[0].isupper() or
-            (not cls.__name__[0].isalpha())):
-        class_name = 'Draft'
-    else:
-        class_name = 'Draft_'
+    class_name = 'Draft'
+    # if (cls.__name__[0].isupper() or
+    #         (not cls.__name__[0].isalpha())):
+    #     class_name = 'Draft'
+    # else:
+    #     class_name = 'Draft_'
 
     base_draft = get_baseclass()
         
-    class_name = class_name + cls.__name__
+    class_name = class_name + '[' + cls.__name__ + ']'
     base_class = (base_draft, )
     
     # Custom function for custom Draft
